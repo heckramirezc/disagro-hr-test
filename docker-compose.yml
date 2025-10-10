@@ -1,0 +1,24 @@
+version: '3.9'
+services:
+  # Servicio de base de datos disagro_hr_postgres
+  postgres:
+    image: postgres:17-alpine
+    container_name: disagro_hr_postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data # Persistencia de datos para disagro_hr_test
+      - ./db/ddl:/docker-entrypoint-initdb.d # Ejecución inicial para disagro_hr_test
+    restart: always
+    healthcheck: #Verificación de disponibilidad disagro_hr_test
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
