@@ -15,7 +15,7 @@ services:
       - ./db/ddl:/docker-entrypoint-initdb.d # Ejecución inicial para disagro_hr_test
     restart: always
     healthcheck: #Verificación de disponibilidad disagro_hr_test
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"] 
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"] 
       interval: 5s
       timeout: 5s
       retries: 5
