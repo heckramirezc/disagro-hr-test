@@ -1,0 +1,50 @@
+# ----------------------------------------------------------------------
+# Configuración del Sistema Operativo
+# ----------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# ----------------------------------------------------------------------
+# Entornos Virtuales de Python (VENV)
+# ----------------------------------------------------------------------
+venv/
+.venv/
+env/
+*.pyc
+__pycache__/
+
+# ----------------------------------------------------------------------
+# Logs, Archivos de Pruebas y Output
+# ----------------------------------------------------------------------
+*.log
+*.sqlite
+/dist
+/build
+/htmlcov/
+.coverage
+
+# ----------------------------------------------------------------------
+# Credenciales y Archivos de Entorno (¡CRÍTICO!)
+# Nunca subas contraseñas, claves API o credenciales.
+# ----------------------------------------------------------------------
+readme_original.md
+.env
+.env.production
+.env.*
+.env_prod
+*.key
+*.json # Cuidado: puede contener claves de servicio de GCP
+.credentials/
+
+# ----------------------------------------------------------------------
+# Artefactos de Docker
+# ----------------------------------------------------------------------
+# Archivos de datos persistentes de la base de datos local
+postgres_data/
+
+# ----------------------------------------------------------------------
+# IDEs y Editores Comunes (VS Code, Pycharm, etc.)
+# ----------------------------------------------------------------------
+.vscode/
+.idea/
