@@ -32,6 +32,24 @@ services:
         condition: service_healthy
     # Este contenedor solo se ejecuta una vez (Job)
     restart: "no"
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: disagro_hr_api
+    env_file:
+      - .env
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # volumes:
+    #   - ./api:/app # Descomentar para desarrollo en vivo (live-reloading)
+    restart: unless-stopped
 
 volumes:
   postgres_data:
