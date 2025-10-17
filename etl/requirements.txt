@@ -1,0 +1,12 @@
+# Conexión a bases de datos
+psycopg2-binary
+# Cliente de BigQuery
+google-cloud-bigquery
+# Transformación de datos
+pandas
+# Manipulación de fechas
+python-dateutil
+# Carga de variables de entorno
+python-dotenv
+# Logging estructurado
+structlog

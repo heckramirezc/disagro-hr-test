@@ -19,6 +19,19 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+  # Servicio ETL
+  etl:
+    build:
+      context: ./etl 
+      dockerfile: Dockerfile
+    container_name: disagro_hr_etl
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Este contenedor solo se ejecuta una vez (Job)
+    restart: "no"
 
 volumes:
   postgres_data:
