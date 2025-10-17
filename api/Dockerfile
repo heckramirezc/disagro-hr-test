@@ -1,23 +1,23 @@
-FROM node:18-alpine AS development
+FROM node:20-alpine AS development
 
 WORKDIR /app
 
-COPY package.json package-lock.json ./
-RUN npm install
+COPY package.json yarn.lock ./ 
+RUN yarn install 
 
 COPY . .
 
-RUN npm run build
+RUN yarn run build
 
-FROM node:18-alpine AS production
+FROM node:20-alpine AS production
 
 ARG NODE_ENV=production
 ENV NODE_ENV=${NODE_ENV}
 
 WORKDIR /app
 
-COPY package.json package-lock.json ./
-RUN npm install --production --omit=dev
+COPY package.json yarn.lock ./
+RUN yarn install --production --frozen-lockfile
 
 COPY --from=development /app/dist ./dist
 # Copia src si necesitas que el configModule lea archivos .env que copiaste
