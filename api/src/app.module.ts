@@ -9,9 +9,6 @@ import { DataSource } from 'typeorm';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: process.env.NODE_ENV === 'production' 
-        ? '../.env.production'
-        : '../.env', 
     }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
@@ -27,8 +24,8 @@ import { DataSource } from 'typeorm';
         synchronize: false,
         
         ssl: configService.get<string>('DB_SSL_MODE') === 'require' 
-          ? { rejectUnauthorized: false }
-          : false, 
+          ? { rejectUnauthorized: false } 
+          : false,
       }),
       inject: [ConfigService],
     }),
