@@ -3,19 +3,31 @@ import psycopg2
 import time
 
 def test_db_connection():
-    db_url = os.getenv("DATABASE_URL")
+    # Obtener variables de Neon inyectadas por Docker Compose
+    HOST = os.getenv('DB_HOST')
+    USER = os.getenv('DB_USER')
+    PASSWORD = os.getenv('DB_PASSWORD')
+    NAME = os.getenv('DB_NAME')
+    SSLMODE = os.getenv('DB_SSLMODE', 'require') # Neon requiere SSL
 
-    if not db_url:
-        print("Error: La variable de entorno DATABASE_URL no está configurada para el ETL.")
+    if not HOST:
+        print("Error: La variable de entorno HOST no está configurada para el ETL.")
         return
 
     print("ETL Service: Esperando que la base de datos esté lista...")
     time.sleep(10)
 
-    print(f"ETL Service: Intentando conectar a PostgreSQL usando: {db_url.split('@')[-1] if '@' in db_url else db_url}...")
+    print(f"ETL Service: Intentando conectar a PostgreSQL usando: {HOST}...")
 
     try:
-        conn = psycopg2.connect(db_url)
+        conn = psycopg2.connect(
+            host=HOST,
+            user=USER,
+            password=PASSWORD,
+            dbname=NAME,
+            sslmode=SSLMODE,
+            connect_timeout=10
+        )
         cursor = conn.cursor()
 
         cursor.execute("SELECT version();")
