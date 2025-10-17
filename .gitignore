@@ -1,50 +1,92 @@
 # ----------------------------------------------------------------------
-# Configuración del Sistema Operativo
+# Configuracion del Sistema Operativo
 # ----------------------------------------------------------------------
 .DS_Store
 Thumbs.db
 Desktop.ini
 
 # ----------------------------------------------------------------------
-# Entornos Virtuales de Python (VENV)
+# Node.js / NestJS (Reglas movidas y consolidadas)
+# ----------------------------------------------------------------------
+# Dependencias de Node
+node_modules
+# Archivos compilados
+/dist
+# Regla explícita para el build de la API (aunque ya estaba en /dist, la ponemos explícita)
+/api/dist/
+/build
+
+# Logs y Errores
+logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Pruebas
+/coverage
+/.nyc_output
+
+# ----------------------------------------------------------------------
+# Python (VENV) y Output
 # ----------------------------------------------------------------------
 venv/
 .venv/
 env/
 *.pyc
 __pycache__/
-
-# ----------------------------------------------------------------------
-# Logs, Archivos de Pruebas y Output
-# ----------------------------------------------------------------------
-*.log
 *.sqlite
-/dist
-/build
 /htmlcov/
 .coverage
 
 # ----------------------------------------------------------------------
-# Credenciales y Archivos de Entorno (¡CRÍTICO!)
-# Nunca subas contraseñas, claves API o credenciales.
+# Credenciales y Archivos de Entorno (¡CRÍTICO! - CON EXCEPCIONES)
 # ----------------------------------------------------------------------
+# EXCEPCIONES: Archivos JSON esenciales de la API (DEBEN subir)
+!api/package.json
+!api/tsconfig.json
+!api/tsconfig.build.json
+!api/nest-cli.json
+
+# REGLA DE BLOQUEO: Keys y credenciales que NO deben subir.
+*.key
+# *.json
+.credentials/
 readme_original.md
 .env
 .env.production
 .env.*
 .env_prod
-*.key
-*.json # Cuidado: puede contener claves de servicio de GCP
-.credentials/
+.env.development.local
+.env.test.local
+.env.production.local
+.env.local
 
 # ----------------------------------------------------------------------
-# Artefactos de Docker
-# ----------------------------------------------------------------------
-# Archivos de datos persistentes de la base de datos local
-postgres_data/
-
-# ----------------------------------------------------------------------
-# IDEs y Editores Comunes (VS Code, Pycharm, etc.)
+# IDEs y Artefactos (Consolidado)
 # ----------------------------------------------------------------------
 .vscode/
 .idea/
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+postgres_data/
+
+# Archivos temporales
+.temp
+.tmp
+pids
+*.pid
+*.seed
+*.pid.lock
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
