@@ -6,12 +6,14 @@ Thumbs.db
 Desktop.ini
 
 # ----------------------------------------------------------------------
-# Node.js / NestJS (Reglas movidas desde /api)
+# Node.js / NestJS (Reglas movidas y consolidadas)
 # ----------------------------------------------------------------------
 # Dependencias de Node
 node_modules
-# Archivos compilados (TypeScript)
+# Archivos compilados
 /dist
+# Regla explícita para el build de la API (aunque ya estaba en /dist, la ponemos explícita)
+/api/dist/
 /build
 
 # Logs y Errores
@@ -22,15 +24,6 @@ pnpm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 lerna-debug.log*
-
-# Archivos temporales y de diagnóstico
-.temp
-.tmp
-pids
-*.pid
-*.seed
-*.pid.lock
-report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
 # Pruebas
 /coverage
@@ -47,29 +40,32 @@ __pycache__/
 *.sqlite
 /htmlcov/
 .coverage
-/build
 
 # ----------------------------------------------------------------------
-# Credenciales y Archivos de Entorno (¡CRÍTICO! - Consolidado)
+# Credenciales y Archivos de Entorno (¡CRÍTICO! - CON EXCEPCIONES)
 # ----------------------------------------------------------------------
-# Archivos específicos de tu configuración
+# EXCEPCIONES: Archivos JSON esenciales de la API (DEBEN subir)
+!api/package.json
+!api/tsconfig.json
+!api/tsconfig.build.json
+!api/nest-cli.json
+
+# REGLA DE BLOQUEO: Keys y credenciales que NO deben subir.
+*.key
+*.json
+.credentials/
 readme_original.md
-
-# Reglas generales de entorno (.env)
 .env
+.env.production
 .env.*
 .env_prod
-.env.development.local # Específico de NestJS, cubre el resto de .env.*
+.env.development.local
 .env.test.local
 .env.production.local
 .env.local
 
-# Keys y credenciales
-*.key
-.credentials/
-
 # ----------------------------------------------------------------------
-# IDEs y Editores Comunes (VS Code, Pycharm, etc. - Consolidado)
+# IDEs y Artefactos (Consolidado)
 # ----------------------------------------------------------------------
 .vscode/
 .idea/
@@ -79,17 +75,18 @@ readme_original.md
 *.launch
 .settings/
 *.sublime-workspace
-# Excepciones para VSCode (Mantenemos la lógica de no ignorar settings.json, etc.)
 .vscode/*
 !.vscode/settings.json
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
-
-# ----------------------------------------------------------------------
-# Artefactos de Docker/PostgreSQL
-# ----------------------------------------------------------------------
 postgres_data/
 
-# Regla específica para la carpeta de compilación de la API (NestJS)
-/api/dist/
+# Archivos temporales
+.temp
+.tmp
+pids
+*.pid
+*.seed
+*.pid.lock
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
