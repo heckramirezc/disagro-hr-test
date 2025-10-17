@@ -25,8 +25,11 @@ services:
       context: ./etl 
       dockerfile: Dockerfile
     container_name: disagro_hr_etl
+    environment:
+      BIGQUERY_PROJECT_ID: "disagro-hr-test"
+      GOOGLE_APPLICATION_CREDENTIALS: /app/bigquery_key.json
     env_file:
-      - .env.production
+      - .env
     depends_on:
       postgres:
         condition: service_healthy
