@@ -47,7 +47,6 @@ __pycache__/
 *.sqlite
 /htmlcov/
 .coverage
-/dist
 /build
 
 # ----------------------------------------------------------------------
@@ -92,3 +91,6 @@ readme_original.md
 # Artefactos de Docker/PostgreSQL
 # ----------------------------------------------------------------------
 postgres_data/
+
+# Regla específica para la carpeta de compilación de la API (NestJS)
+/api/dist/
