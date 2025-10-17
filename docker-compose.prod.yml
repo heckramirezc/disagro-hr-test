@@ -5,6 +5,9 @@ services:
       context: ./etl 
       dockerfile: Dockerfile
     container_name: disagro_hr_etl
+    environment:
+      BIGQUERY_PROJECT_ID: "bigquery-public-data"
+      GOOGLE_APPLICATION_CREDENTIALS: /app/bigquery_key.json
     env_file:
       - .env.production
     restart: "no"

@@ -52,7 +52,7 @@ __pycache__/
 
 # REGLA DE BLOQUEO: Keys y credenciales que NO deben subir.
 *.key
-*.json
+# *.json
 .credentials/
 readme_original.md
 .env

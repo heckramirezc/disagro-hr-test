@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "disagro-hr-test",
+  "private_key_id": "efb858bc7eee7020030721ddb0ee35fc754590d2",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQDLiKew3BG1xSY9\n1skDmDbyy77fbSv46x5a9ijm3WLYpIqSej9+0MavHJFWAWVgYTl3hAcl2VDOLaG/\nmm1p6bWjhHjoA7ORodJjLkRVs4AJL5tDcHBzZrp/HR1N8EwAkTpbhavrA+nGMgp4\neVRnNqy/8FHYcrLVIpfirkuPhlA6Xf1vbcibQlJY9JltSAXo/uX2USxEgQHlZQ3g\noEGJJiRUcWzIrS2dXZr3NeyZCk/SPRCqAAYLT/0W7El6/7ZZvI8JzDAx6SUIYRd7\nFV5aPmBVqIeQzhoZHJmwNTfYYP1ON+4cWDtLPk5LNQDMtgTzFovgro86pZ8jC9ai\nvDK1xsC5AgMBAAECggEABCBpa/nORx3v7E2MRk0iAhK09EE5pMKZmzUF98ZR0Hwn\njhg57NeNS7Qb0z9Uf5uBB4YPAgqxq3h74M9f/Ad/xgizzdpzW9bI1fd0bbtls2n6\nbyfas9BHpDeiJjgixlkrcnsXlPx/kyPlF/O3zR7r6jlUY3vR2eXpZ/BqOkb6HfDM\nHy3GqhUJaTi6+sfqvo71D+/ZheE7zd4PFMaauQx5ZGjYbGJoUKbxBGjSHXx2exGV\nbuJ1Rog9DOwzlcPMqzHSDB0DxTVjngbjnU/6pwc7kIYjcajnXN62lw/pRVGHuz6e\ntv8jlcU/HxQno+Q0zGCgy5hrBMeZQGFaglA05dc7QQKBgQD3VUwIEDGm/dZRvG++\nqADbdkvBhSOt6eScSTB+KMI83VlEVepZE/zRBQMzYnkyRNT5+RB0Nz8MDWZTNj82\nUa6PCzMbuP9W5Cra5ixsWR7O4VRhm0u/G2VK9eG3cfzAi7XPd8KitMM5PF86GHnm\nBYayfT6ziNwapaJRa1OQRH8tGQKBgQDSqnSgilofh5iU8jm2YGfWZ8M+xruNeP/Z\n/4jn55novWshnNeZbQ4zUBqiziD+C8fXaF8KxiTFFEOKSa/lUyWaSBYwOIiLWhuf\nO+4bFpRBZuZJ7e2p+mDC/p/socUWtEenjh6D2IxYqvuXltXUKKzcFz7/Dt5eAnky\nDO7tea8EoQKBgBdN2ycbV4JTgoEbDzBYphQHlmW6hL0bP6YWI1KPxpVzibitm7Ie\n9wA+x6lsytyYrbSL6if5GKCrFowanWQh2B+0P3GKQczPHNaZP3BKCWQWyRuVRVLR\nYv7oIgdl3xnJUC0nLJimDYr0DEjuC3ZH6QQiVukVqR99ocioIyyBt7XpAoGAdM2/\n5ndvasXy6rq3FxCy4iUcE0V7HgC10zgkv3ghVPMZYESnIdFeq0LB0fz6PAFqJ1we\nPkoIfyEyJY2fskX8tmM7sjbWNnWalRpUdb56Kx0TmHAMc094sQUexMQZE/KXPCbH\ncpDxmAQNhUpDeuOmnE1jR2YGExfJ/N9A5niueqECgYANgORcJ17gzxn1595rC+BX\nVEPrdF6GWvIq2KN5Ym0GRLuLZk0ra01bDiSsCuMHMhTc0u0mjb+lRR4FFPRob4nC\nNfKOMsXhotBp1EQrTapFoa1RF34OOwWOAz9ytwjZa8BUR9ABiPhWMBPsiDtzugc8\nH84H6EvIb/Pjd/ow1/oasA==\n-----END PRIVATE KEY-----\n",
+  "client_email": "disagrohr-test-etl-bq-access@disagro-hr-test.iam.gserviceaccount.com",
+  "client_id": "101956563885143112821",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/disagrohr-test-etl-bq-access%40disagro-hr-test.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}
