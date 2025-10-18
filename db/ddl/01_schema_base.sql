@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS dim_page (
     language VARCHAR(10) NOT NULL,
     category VARCHAR(50),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     UNIQUE (title_normalized, language) -- Garantiza una página por título e idioma. 
 );
 
