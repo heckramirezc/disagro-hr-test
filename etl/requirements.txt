@@ -10,3 +10,5 @@ python-dateutil
 python-dotenv
 # Logging estructurado
 structlog
+# Manejo de tipo de datos
+db-dtypes
