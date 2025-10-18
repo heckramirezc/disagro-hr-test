@@ -53,7 +53,6 @@ __pycache__/
 # REGLA DE BLOQUEO: Keys y credenciales que NO deben subir.
 *.key
 # *.json
-bigquery_key.json
 .credentials/
 readme_original.md
 .env
