@@ -3,11 +3,16 @@ from datetime import datetime
 from google.cloud import bigquery
 import pandas as pd
 import unicodedata
+import psycopg2
+from psycopg2 import extras
+from math import ceil
+import re
 
 BIGQUERY_PROJECT_ID = os.getenv("BIGQUERY_PROJECT_ID", "disagro-hr-test")
 PUBLIC_DATA_ID = "bigquery-public-data"
 BIGQUERY_DATASET = "wikipedia"
 BIGQUERY_TABLE_PREFIX = "pageviews_"
+DIM_BATCH_SIZE = 500
 
 def get_bigquery_client():
     try:
@@ -16,6 +21,14 @@ def get_bigquery_client():
     except Exception as e:
         print(f"Error al inicializar cliente de BigQuery: {e}")
         raise
+
+def normalize_string(text):
+    if pd.isna(text):
+        return text
+    
+    normalized = unicodedata.normalize('NFD', str(text))
+    cleaned = ''.join(c for c in normalized if unicodedata.category(c) != 'Mn')
+    return cleaned
 
 def extract_pageviews(
     client: bigquery.Client,
@@ -124,49 +137,76 @@ def extract_pageviews(
 
     df_daily_total = final_df.rename(columns={'views': 'views_total'}, inplace=False)
 
-    
     return df_daily_total
 
-def normalize_string(text):
-    if pd.isna(text):
-        return text
+
+def classify_page(title):
+    title_lower = str(title).lower()
     
-    normalized = unicodedata.normalize('NFD', str(text))
-    cleaned = ''.join(c for c in normalized if unicodedata.category(c) != 'Mn')
-    return cleaned
+    if re.search(r'movie|film|actor|series|tv|netflix', title_lower):
+        return 'Cine_TV'
+    if re.search(r'software|program|ai|data|python|java', title_lower):
+        return 'Tecnologia'
+    if re.search(r'earthquake|physics|chemistry|space|science|astronomy', title_lower):
+        return 'Ciencia'
+    if re.search(r'sport|football|soccer|basket|world_cup', title_lower):
+        return 'Deportes'
+    
+    return 'General'
+
 
 def transform_data(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         print("No hay datos, no se aplicarán transformaciones.")
         return df
 
-    df = df.copy()
-    df = df.sort_values(by=['language', 'title', 'platform_type', 'day'])
+    df = df.copy()    
+    df_platform_agg = df.groupby(['day', 'language', 'title']).agg(
+        views_total=('views_total', 'sum')
+    ).reset_index()
+    
+    df = df_platform_agg.copy()
+    df = df.sort_values(by=['language', 'title', 'day'])
+
+    df['category'] = df['title'].apply(classify_page)
 
     # Normalización del título para la dimensión dim_page
-    df['normalized_title'] = df['title'].apply(normalize_string)
-    df['normalized_title'] = df['normalized_title'].str.lower()
-    df['normalized_title'] = df['normalized_title'].str.replace(' ', '_', regex=False)
-
+    df['title_normalized'] = df['title'].apply(normalize_string)    
+    df['title_normalized'] = df['title_normalized'].str.lower().str.replace('_', ' ', regex=False)
+    df['title_normalized'] = df['title_normalized'].str.replace(r'[^a-z0-9 ]', '', regex=True)
+    df['title_normalized'] = df['title_normalized'].str.replace(r'\s+', '_', regex=True)
+    df['title_normalized'] = df['title_normalized'].str.strip('_')
+    df['title_normalized'] = df['title_normalized'].str.replace('\x00', '', regex=False).str.strip()
+    df['title_normalized'] = df['title_normalized'].apply(lambda x: 'unknown_page' if len(x) == 0 else x) 
+    df['title_normalized'] = df['title_normalized'].str.slice(0, 250)
+    
+    df_final_agg = df.groupby(['day', 'language', 'title_normalized']).agg(
+        views_total=('views_total', 'sum'),
+        category=('category', 'first')
+    ).reset_index()
+    
+    df = df_final_agg.copy()
+    df = df.sort_values(by=['language', 'title_normalized', 'day'])
+    
     # Cálculo de promedio móvil (7 días)
-    df['avg_views_7d'] = df.groupby(['language', 'title', 'platform_type'])['views_total'].transform(
+    df['avg_views_7d'] = df.groupby(['language', 'title_normalized'])['views_total'].transform(
         lambda x: x.rolling(window=7, min_periods=1).mean()
     )
     
     # Cálculo de promedio móvil (28 días)
-    df['avg_views_28d'] = df.groupby(['language', 'title', 'platform_type'])['views_total'].transform(
+    df['avg_views_28d'] = df.groupby(['language', 'title_normalized'])['views_total'].transform(
         lambda x: x.rolling(window=28, min_periods=1).mean()
     )
 
     # Cálculo de variaciones (Crecimiento porcentual de las vistas de una página)
-    df['previous_day_views'] = df.groupby(['language', 'title', 'platform_type'])['views_total'].shift(1)
+    df['previous_day_views'] = df.groupby(['language', 'title_normalized'])['views_total'].shift(1)
     df['variations'] = ((df['views_total'] - df['previous_day_views']) / df['previous_day_views']) * 100
     df['variations'] = df['variations'].replace([float('inf'), float('-inf')], 0) 
     df = df.drop(columns=['previous_day_views'])
     df['variations'] = df['variations'].fillna(0)
 
     # Cálculo de tendencias
-    df['rolling_std_28d'] = df.groupby(['language', 'title', 'platform_type'])['views_total'].transform(
+    df['rolling_std_28d'] = df.groupby(['language', 'title_normalized'])['views_total'].transform(
         lambda x: x.rolling(window=28, min_periods=1).std()
     )
     
@@ -177,9 +217,174 @@ def transform_data(df: pd.DataFrame) -> pd.DataFrame:
     df['trend_score'] = df['trend_score'].replace([float('inf'), float('-inf')], 0)
     df['trend_score'] = df['trend_score'].fillna(0)
 
-    df = df.drop(columns=['rolling_std_28d'])
-
+    df = df.drop(columns=['rolling_std_28d'])    
     return df
+
+def load_data_to_postgres(df: pd.DataFrame):
+    if df.empty:
+        print("DataFrame vacío, no hay datos para cargar en PostgreSQL.")
+        return
+
+    HOST = os.getenv('DB_HOST')
+    USER = os.getenv('DB_USER')
+    PASSWORD = os.getenv('DB_PASSWORD')
+    NAME = os.getenv('DB_NAME')
+    SSLMODE = os.getenv('DB_SSLMODE', 'require')
+
+    if not HOST:
+        print("Variable de entorno HOST no está configurada para el ETL.")
+        return
+
+    conn = None
+    try:
+        conn = psycopg2.connect(
+            host=HOST,
+            user=USER,
+            password=PASSWORD,
+            dbname=NAME,
+            sslmode=SSLMODE,
+            connect_timeout=10
+        )
+        cur = conn.cursor()
+        
+        conn.autocommit = False 
+        
+        # Proceso para dim_page
+        df['title_normalized'] = df['title_normalized'].astype(str).str.strip()
+        df['language'] = df['language'].astype(str).str.strip() 
+        df['title_normalized'] = df['title_normalized'].str.replace('\x00', '', regex=False).str.strip()
+        
+        dim_page_data = df[['title_normalized', 'language', 'category']].drop_duplicates().copy()
+        dim_page_data = dim_page_data.reset_index(drop=True)
+        num_keys = len(dim_page_data)
+                
+        insert_dim_page_query = """
+            INSERT INTO dim_page (title_normalized, language, category)
+            VALUES %s
+            ON CONFLICT (title_normalized, language) DO UPDATE
+            SET
+                category = EXCLUDED.category,
+                updated_at = NOW()
+            RETURNING page_id, title_normalized AS title_normalized_db, language AS language_db;
+        """
+        
+        all_inserted_pages = []
+
+        for i in range(0, num_keys, DIM_BATCH_SIZE):
+            chunk = dim_page_data.iloc[i:i + DIM_BATCH_SIZE]
+            
+            extras.execute_values(
+                cur, 
+                insert_dim_page_query, 
+                chunk[['title_normalized', 'language', 'category']].values, 
+                page_size=DIM_BATCH_SIZE
+            ) 
+            inserted_dim_pages = cur.fetchall()
+            all_inserted_pages.extend(inserted_dim_pages)
+        
+        conn.commit()
+
+        dim_page_map_df = pd.DataFrame(
+            all_inserted_pages, 
+            columns=['page_id', 'title_normalized_db', 'language_db']
+        )
+        
+        dim_page_map_df['title_normalized_db'] = dim_page_map_df['title_normalized_db'].astype(str).str.strip()
+        dim_page_map_df['language_db'] = dim_page_map_df['language_db'].astype(str).str.strip()
+        dim_page_map_df['title_normalized_db'] = (
+            dim_page_map_df['title_normalized_db']
+            .str.replace('\x00', '', regex=False)
+            .str.strip() 
+        )
+        
+        df = pd.merge(
+            df, 
+            dim_page_map_df, 
+            left_on=['title_normalized', 'language'],
+            right_on=['title_normalized_db', 'language_db'],
+            how='left'
+        )
+
+        if 'page_id' not in df.columns or df['page_id'].isnull().any():
+            unmapped_rows = df[df['page_id'].isnull()]
+            if not unmapped_rows.empty:
+                print("\nERROR: Los siguientes datos no pudieron mapear el page_id:")
+                print(unmapped_rows[['title_normalized', 'language']].drop_duplicates().head(5))
+            
+            raise Exception("Error al mapear page_id después del UPSERT de dim_page. El problema no fue solucionado.")
+        
+        df.drop(columns=['title_normalized_db', 'language_db', 'title_normalized', 'category'], inplace=True, errors='ignore')
+
+        # Proceso para fact_pageviews_daily
+        fact_columns = [
+            'day', 'page_id', 'language', 'views_total', 'avg_views_7d',
+            'avg_views_28d', 'variations', 'trend_score'
+        ]
+        
+        df['page_id'] = df['page_id'].astype(int)
+        
+        df_for_fact = df[fact_columns].copy()
+        df_for_fact = df_for_fact.where(pd.notnull(df_for_fact), None)
+
+        insert_fact_query = """
+            INSERT INTO fact_pageviews_daily (
+                day, page_id, language, views_total, avg_views_7d, avg_views_28d, variations, trend_score
+            )
+            VALUES %s
+            ON CONFLICT (day, page_id, language) DO UPDATE SET
+                views_total = EXCLUDED.views_total,
+                avg_views_7d = EXCLUDED.avg_views_7d,
+                avg_views_28d = EXCLUDED.avg_views_28d,
+                variations = EXCLUDED.variations,
+                trend_score = EXCLUDED.trend_score,
+                updated_at = NOW();
+        """
+        
+        extras.execute_values(cur, insert_fact_query, df_for_fact.values, page_size=2000)
+        conn.commit()
+
+    except (Exception, psycopg2.Error) as error:
+        print(f"Error durante la carga de datos en PostgreSQL: {error}")
+        if conn:
+            conn.rollback()
+        raise
+    finally:
+        if conn:
+            cur.close()
+            conn.close()
+
+def refresh_materialized_views():
+    HOST = os.getenv('DB_HOST')
+    USER = os.getenv('DB_USER')
+    PASSWORD = os.getenv('DB_PASSWORD')
+    NAME = os.getenv('DB_NAME')
+    SSLMODE = os.getenv('DB_SSLMODE', 'require')
+    
+    conn = None
+    try:
+        conn = psycopg2.connect(
+            host=HOST,
+            user=USER,
+            password=PASSWORD,
+            dbname=NAME,
+            sslmode=SSLMODE,
+            connect_timeout=10
+        )
+        cur = conn.cursor()
+
+        cur.execute("REFRESH MATERIALIZED VIEW mv_top_n_daily_by_language;")
+        cur.execute("REFRESH MATERIALIZED VIEW mv_trending_daily;")
+        conn.commit()
+
+    except (Exception, psycopg2.Error) as error:
+        print(f"Error al refrescar vistas materializadas: {error}")
+        if conn:
+            conn.rollback()
+        raise
+    finally:
+        if conn:
+            cur.close()
+            conn.close()
 
 def run_etl():
     start_date_str = "2023-12-26"
@@ -205,9 +410,10 @@ def run_etl():
             print("\nNo se extrajeron datos para los parámetros proporcionados. No hay datos para transformar.")
             return
 
-        print(extracted_data.head())
         transformed_data = transform_data(extracted_data)
-        print(transformed_data.head())
+        load_data_to_postgres(transformed_data)
+        refresh_materialized_views()
+        print(f"El proceso de carga a base de datos se completó con éxito.")
 
     except Exception as e:
         import traceback
