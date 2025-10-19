@@ -1,9 +1,10 @@
-import { Module } from '@nestjs/common';
+import { Module, Logger } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { DataSource } from 'typeorm'; 
+import { PageModule } from './page/page.module';
 
 @Module({
   imports: [
@@ -29,11 +30,11 @@ import { DataSource } from 'typeorm';
       }),
       inject: [ConfigService],
     }),
+    PageModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService, Logger],
 })
 export class AppModule {
-    constructor(private dataSource: DataSource) {
-    }
+    constructor(private dataSource: DataSource) { }
 }
