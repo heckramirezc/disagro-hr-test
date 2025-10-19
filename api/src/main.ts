@@ -2,7 +2,9 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { DataSource } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'; // <-- Importaciones de Swagger
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { RedocModule } from 'nest-redoc'; 
+import { PageModule } from './page/page.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -22,10 +24,26 @@ async function bootstrap() {
     .addTag('Páginas de Wikipedia | Fuentes de datos BigQuery/PostgreSQL')
     .build();
 
-  const document = SwaggerModule.createDocument(app, config);
-  // La documentación estará disponible en /api-docs
-  SwaggerModule.setup('api-docs', app, document);
-  // ---------------------------------
+  const document = SwaggerModule.createDocument(app, config, {
+      include: [PageModule]
+  });
+  
+  SwaggerModule.setup('/api-docs', app, document);
+
+  const redocOptions = {
+    title: 'API de la Prueba Técnica DISAGRO - Wikipedia Pageviews',
+    sortPropsAlphabetically: true,
+    hideDownloadButton: false,
+    theme: {
+      colors: {
+        primary: {
+          main: '#FF4747',
+        },
+      },
+    },
+  };
+  
+  await RedocModule.setup('/', app, document, redocOptions);
   
   try {
     const dataSource = app.get(DataSource);
