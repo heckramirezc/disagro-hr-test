@@ -1,4 +1,4 @@
-FROM node:20-alpine AS development
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 
@@ -19,9 +19,7 @@ WORKDIR /app
 COPY package.json yarn.lock ./
 RUN yarn install --production --frozen-lockfile
 
-COPY --from=development /app/dist ./dist
-# Copia src si necesitas que el configModule lea archivos .env que copiaste
-# COPY --from=development /app/src ./src
+COPY --from=builder /app/dist ./dist
 
 EXPOSE 3000
 
