@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { DataSource } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'; // <-- Importaciones de Swagger
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -14,6 +15,18 @@ async function bootstrap() {
     credentials: true,
   });
   
+  const config = new DocumentBuilder()
+    .setTitle('API de la Prueba Técnica DISAGRO - Wikipedia Pageviews')
+    .setDescription('API para obtener rankings diarios y series temporales de vistas de páginas de Wikipedia, como parte de la Prueba Técnica. Desarrollada por Hector Ramírez')
+    .setVersion('1.0')
+    .addTag('Páginas de Wikipedia | Fuentes de datos BigQuery/PostgreSQL')
+    .build();
+
+  const document = SwaggerModule.createDocument(app, config);
+  // La documentación estará disponible en /api-docs
+  SwaggerModule.setup('api-docs', app, document);
+  // ---------------------------------
+  
   try {
     const dataSource = app.get(DataSource);
     if (dataSource.isInitialized) {
@@ -25,7 +38,9 @@ async function bootstrap() {
     console.error('API Service: Error al intentar obtener la conexión a la base de datos:', error.message);
   }
 
-  await app.listen(configService.get<number>('PORT') || 3000);
-  console.log(`API Service: Aplicación NestJS corriendo en: ${await app.getUrl()}`);
+  const port = configService.get<number>('PORT') || 3000;
+  await app.listen(port);
+  console.log(`API Service: ACorriendo en: ${await app.getUrl()}`);
+  console.log(`API Service: Documentación de Swagger disponible en: ${await app.getUrl()}/api-docs`);
 }
 bootstrap();

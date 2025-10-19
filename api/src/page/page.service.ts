@@ -36,7 +36,7 @@ export class PageService {
     const total = parseInt(totalResult[0]?.total, 10) || 0;
 
     if (total === 0) {
-      return this.paginationService.buildResponse([], 0, safeLimit, safeOffset, _params);
+      return this.paginationService.buildPaginatedResponse([], 0, safeLimit, safeOffset, _params);
     }
 
     const itemsQuery = `
@@ -55,7 +55,7 @@ export class PageService {
       LIMIT $3 OFFSET $4;
     `;
     const items = await this.dataSource.query(itemsQuery, [request.date, request.lang, safeLimit, safeOffset]);
-    return this.paginationService.buildResponse(items, total, safeLimit, safeOffset, _params);
+    return this.paginationService.buildPaginatedResponse(items, total, safeLimit, safeOffset, _params);
   }
 
   async getPageSeries(
@@ -83,7 +83,7 @@ export class PageService {
     `;
     const pageResult = await this.dataSource.query(pageIdQuery, [params.title, request.lang]);
     if (pageResult.length === 0) {
-      return this.paginationService.buildResponse([], 0, 10, 0, _params);
+      return this.paginationService.buildSeriesResponse([], _params);
     }
 
     const pageId = pageResult[0].page_id;
@@ -106,6 +106,6 @@ export class PageService {
     `;
 
     const items = await this.dataSource.query(seriesQuery, [pageId, category, request.date_from, request.date_to]); 
-    return this.paginationService.buildResponse(items, items.length, 1000, 0, _params);
+    return this.paginationService.buildSeriesResponse(items, _params);
   }
 }
