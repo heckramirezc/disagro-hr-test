@@ -1,7 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { PaginationService, PaginatedResponse } from '../pagination/pagination.service';
 import { GetTopPagesDto } from './dto/get-top-pages.dto';
+import { GetPageSeriesDto } from './dto/get-page-series.dto';
+import { PageParamsDto } from './dto/page-params.dto';
 
 @Injectable()
 export class PageService {
@@ -54,5 +56,56 @@ export class PageService {
     `;
     const items = await this.dataSource.query(itemsQuery, [request.date, request.lang, safeLimit, safeOffset]);
     return this.paginationService.buildResponse(items, total, safeLimit, safeOffset, _params);
+  }
+
+  async getPageSeries(
+    params: PageParamsDto,
+    request: GetPageSeriesDto,
+  ): Promise<PaginatedResponse<any>> {
+    
+    if (new Date(request.date_from).toString() === 'Invalid Date' || new Date(request.date_to).toString() === 'Invalid Date') {
+        throw new BadRequestException('Las fechas de inicio y fin deben ser válidas (YYYY-MM-DD).');
+    }
+
+    const _params = { 
+      title: params.title, 
+      lang: request.lang, 
+      date_from: request.date_from, 
+      date_to: request.date_to 
+    };
+    const pageIdQuery = `
+      SELECT 
+        page_id, category
+      FROM 
+        dim_page
+      WHERE 
+        title_normalized = $1 AND language = $2;
+    `;
+    const pageResult = await this.dataSource.query(pageIdQuery, [params.title, request.lang]);
+    if (pageResult.length === 0) {
+      return this.paginationService.buildResponse([], 0, 10, 0, _params);
+    }
+
+    const pageId = pageResult[0].page_id;
+    const category = pageResult[0].category;
+
+    const seriesQuery = `
+      SELECT
+        fpd.day,
+        fpd.views_total,
+        fpd.avg_views_7d,
+        fpd.avg_views_28d,
+        fpd.variations,
+        fpd.trend_score,
+        $2 AS category -- Ahora $2, se pasa como una columna constante
+      FROM 
+        fact_pageviews_daily fpd
+      WHERE 
+        fpd.page_id = $1 AND fpd.day BETWEEN $3 AND $4
+      ORDER BY fpd.day ASC;
+    `;
+
+    const items = await this.dataSource.query(seriesQuery, [pageId, category, request.date_from, request.date_to]); 
+    return this.paginationService.buildResponse(items, items.length, 1000, 0, _params);
   }
 }
