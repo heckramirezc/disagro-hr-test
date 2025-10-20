@@ -4,19 +4,26 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 -- Tabla para el registro y seguimiento del estado de cada trabajo ETL, facilitando su orquestación y monitoreo desde el frontend. 
 CREATE TABLE IF NOT EXISTS etl_jobs (
     job_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    status VARCHAR(50) NOT NULL, -- 'PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED'
-    start_time TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    end_time TIMESTAMP WITH TIME ZONE,
-    params JSONB, -- Parámetros con los que se inició el ETL (fechas, idiomas, etc.)
+    status VARCHAR(50) NOT NULL,
+    params JSONB,
     message TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    job_type VARCHAR(50) NOT NULL,
+    data_date DATE,
+    requested_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    started_at TIMESTAMP WITH TIME ZONE,
+    finished_at TIMESTAMP WITH TIME ZONE,
+    worker_id VARCHAR(100),
+    rows_processed INT,
+    error_message TEXT
 );
 
 -- Tabla de Dimensión
 CREATE TABLE IF NOT EXISTS dim_page (
     page_id SERIAL PRIMARY KEY,
     title_normalized VARCHAR(255) NOT NULL,
+    original_title VARCHAR(255) NOT NULL,
     language VARCHAR(10) NOT NULL,
     category VARCHAR(50),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
