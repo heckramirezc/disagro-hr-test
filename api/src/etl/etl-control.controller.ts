@@ -22,4 +22,20 @@ export class EtlControlController {
     // TODO: Lógica de invocación real (Cloud Pub/Sub, Cloud Tasks).
     return this.etlControlService.startEtlJob(startEtlDto);
   }
+
+  @Get('status/:jobId')
+  @ApiOperation({ summary: 'Consultar el estado de un trabajo ETL por su ID.' })
+  @ApiParam({
+    name: 'jobId',
+    type: 'string',
+    description: 'Identificador único (UUID) del trabajo ETL.',
+    example: 'a1b2c3d4-e5f6-7890-1234-567890abcdef',
+  })
+  @ApiResponse({ status: HttpStatus.OK, description: 'Estado del trabajo ETL encontrado.', type: EtlJob })
+  @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Job ID no encontrado.' })
+  @ApiResponse({ status: HttpStatus.BAD_REQUEST, description: 'Formato de Job ID inválido.' })
+  async getEtlJobStatus(@Param('jobId') jobId: string): Promise<EtlJob> {
+    const job = await this.etlControlService.getJobStatus(jobId);
+    return job;
+  }
 }
