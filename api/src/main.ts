@@ -5,6 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { RedocModule } from 'nest-redoc'; 
 import { PageModule } from './page/page.module';
+import { EtlControlModule } from './etl/etl-control.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -25,7 +26,7 @@ async function bootstrap() {
     .build();
 
   const document = SwaggerModule.createDocument(app, config, {
-      include: [PageModule]
+      include: [PageModule, EtlControlModule]
   });
   
   SwaggerModule.setup('/api-docs', app, document);

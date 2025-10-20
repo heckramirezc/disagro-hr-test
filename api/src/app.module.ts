@@ -5,6 +5,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { DataSource } from 'typeorm'; 
 import { PageModule } from './page/page.module';
+import { EtlControlModule } from './etl/etl-control.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { PageModule } from './page/page.module';
       inject: [ConfigService],
     }),
     PageModule,
+    EtlControlModule
   ],
   controllers: [AppController],
   providers: [AppService, Logger],
