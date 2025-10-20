@@ -27,4 +27,32 @@ export class EtlControlService {
     const savedJob = await this.etlJobRepository.save(newJob);
     return savedJob;
   }
+
+  async getJobStatus(job_id: string): Promise<EtlJob> {
+    const job = await this.etlJobRepository.findOne({ where: { job_id } });
+
+    if (!job) {
+      throw new NotFoundException(`Job con ID "${job_id}" no encontrado.`);
+    }
+
+    return job;
+  }
+
+  // Simulación de estado ETL
+  @Cron(CronExpression.EVERY_MINUTE)
+  async simulateJobCompletion() {
+    const jobToComplete = await this.etlJobRepository.findOne({
+      where: { status: 'EN_CURSO' },
+      order: { started_at: 'ASC' },
+    });
+
+    if (jobToComplete) {
+      jobToComplete.status = 'COMPLETADO';
+      jobToComplete.finished_at = new Date();
+      jobToComplete.rows_processed = Math.floor(Math.random() * (150000 - 50000 + 1)) + 50000;
+      jobToComplete.worker_id = 'simulador-local';
+
+      await this.etlJobRepository.save(jobToComplete);
+    }
+  }
 }
