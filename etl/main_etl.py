@@ -1,4 +1,6 @@
 import os
+import sys
+import json
 from datetime import datetime
 from google.cloud import bigquery
 import pandas as pd
@@ -7,12 +9,145 @@ import psycopg2
 from psycopg2 import extras
 from math import ceil
 import re
+import numpy as np
+from typing import Optional, List
 
 BIGQUERY_PROJECT_ID = os.getenv("BIGQUERY_PROJECT_ID", "disagro-hr-test")
 PUBLIC_DATA_ID = "bigquery-public-data"
 BIGQUERY_DATASET = "wikipedia"
 BIGQUERY_TABLE_PREFIX = "pageviews_"
 DIM_BATCH_SIZE = 500
+
+def get_db_connection():
+    HOST = os.getenv('DB_HOST')
+    USER = os.getenv('DB_USER')
+    PASSWORD = os.getenv('DB_PASSWORD')
+    NAME = os.getenv('DB_NAME')
+    SSLMODE = os.getenv('DB_SSLMODE', 'require')
+
+    if not HOST:
+        print("ERROR: Variable de entorno DB_HOST no está configurada.")
+        return None
+
+    try:
+        conn = psycopg2.connect(
+            host=HOST,
+            user=USER,
+            password=PASSWORD,
+            dbname=NAME,
+            sslmode=SSLMODE,
+            connect_timeout=10
+        )
+        return conn
+    except psycopg2.Error as error:
+        print(f"Error al conectar a PostgreSQL: {error}")
+        return None
+
+def register_etl_job_start(start_date: str, end_date: str, languages: List[str], worker_id: str = "worker-python-01") -> Optional[str]:
+    conn = get_db_connection()
+    if conn is None:
+        return None
+
+    try:
+        cur = conn.cursor()
+        
+        job_parameters = {
+            "start_date": start_date,
+            "end_date": end_date,
+            "languages": languages,
+        }
+        job_parameters_json = json.dumps(job_parameters)
+        insert_query = """
+            INSERT INTO etl_jobs (
+                status, job_type, data_date, requested_at, started_at, worker_id, params, message
+            )
+            VALUES (
+                'INICIADO', 
+                'INGESTA_DIARIA', 
+                %s,
+                NOW(), 
+                NOW(), 
+                %s,
+                %s,
+                'Job registrado e inicializado.'
+            )
+            RETURNING job_id;
+        """
+        
+        cur.execute(insert_query, (start_date, worker_id, job_parameters_json))        
+        job_id = cur.fetchone()[0]
+        conn.commit()
+        print(f"Job ETL registrado exitosamente con ID: {job_id}")
+        return job_id
+
+    except (Exception, psycopg2.Error) as error:
+        print(f"ERROR: No se pudo registrar el Job ETL en la base de datos: {error}")
+        if conn:
+            conn.rollback()
+        return None
+    finally:
+        if conn:
+            cur.close()
+            conn.close()
+
+def update_etl_job_status(
+    job_id: str, 
+    status: str, 
+    message: Optional[str] = None,
+    rows_processed: Optional[int] = None, 
+    error_message: Optional[str] = None
+) -> bool:
+    conn = get_db_connection()
+    if conn is None:
+        print(f"No se pudo conectar a la BD para actualizar el estado del Job {job_id}.")
+        return False
+
+    try:
+        cur = conn.cursor()
+        
+        update_parts = [
+            "status = %s", 
+            "updated_at = NOW()"
+        ]
+        params = [status]
+        
+        if message is not None:
+            update_parts.append("message = %s")
+            params.append(message)
+
+        if rows_processed is not None:
+            update_parts.append("rows_processed = %s")
+            params.append(rows_processed)
+            
+        if error_message is not None:
+            update_parts.append("error_message = %s")
+            params.append(error_message)
+            
+        if status in ['COMPLETADO', 'FALLIDO']:
+            update_parts.append("finished_at = NOW()")
+
+        update_query = f"""
+            UPDATE etl_jobs 
+            SET {', '.join(update_parts)}
+            WHERE job_id = %s;
+        """
+        
+        params.append(job_id)
+
+        cur.execute(update_query, tuple(params))
+        conn.commit()
+        print(f"Job ETL {job_id} actualizado a estado: {status} - {message if message else ''}")
+        return True
+
+    except (Exception, psycopg2.Error) as error:
+        print(f"ERROR: No se pudo actualizar el estado del Job ETL {job_id}: {error}")
+        if conn:
+            conn.rollback()
+        return False
+    finally:
+        if conn:
+            cur.close()
+            conn.close()
 
 def get_bigquery_client():
     try:
@@ -139,7 +274,6 @@ def extract_pageviews(
 
     return df_daily_total
 
-
 def classify_page(title):
     title_lower = str(title).lower()
     
@@ -153,7 +287,6 @@ def classify_page(title):
         return 'Deportes'
     
     return 'General'
-
 
 def transform_data(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
@@ -169,6 +302,7 @@ def transform_data(df: pd.DataFrame) -> pd.DataFrame:
     df = df.sort_values(by=['language', 'title', 'day'])
 
     df['category'] = df['title'].apply(classify_page)
+    df['original_title'] = df['title'].copy() 
 
     # Normalización del título para la dimensión dim_page
     df['title_normalized'] = df['title'].apply(normalize_string)    
@@ -182,7 +316,8 @@ def transform_data(df: pd.DataFrame) -> pd.DataFrame:
     
     df_final_agg = df.groupby(['day', 'language', 'title_normalized']).agg(
         views_total=('views_total', 'sum'),
-        category=('category', 'first')
+        category=('category', 'first'),
+        original_title=('original_title', 'first') 
     ).reset_index()
     
     df = df_final_agg.copy()
@@ -211,10 +346,16 @@ def transform_data(df: pd.DataFrame) -> pd.DataFrame:
     )
     
     # Z-score = (valor_actual - media_rolling) / desviacion_estandar_rolling
-    df['trend_score'] = (df['views_total'] - df['avg_views_28d']) / df['rolling_std_28d']
-
+    std_col = df['rolling_std_28d']
+    diff_col = df['views_total'] - df['avg_views_28d']
+    
     # Manejo casos donde la desviación estándar es cero
-    df['trend_score'] = df['trend_score'].replace([float('inf'), float('-inf')], 0)
+    df['trend_score'] = np.where(
+        std_col == 0,
+        0, 
+        diff_col / std_col
+    )
+    
     df['trend_score'] = df['trend_score'].fillna(0)
 
     df = df.drop(columns=['rolling_std_28d'])    
@@ -225,45 +366,36 @@ def load_data_to_postgres(df: pd.DataFrame):
         print("DataFrame vacío, no hay datos para cargar en PostgreSQL.")
         return
 
-    HOST = os.getenv('DB_HOST')
-    USER = os.getenv('DB_USER')
-    PASSWORD = os.getenv('DB_PASSWORD')
-    NAME = os.getenv('DB_NAME')
-    SSLMODE = os.getenv('DB_SSLMODE', 'require')
+    conn = get_db_connection()
+    if conn is None:
+        raise Exception("Fallo al conectar a la base de datos para la carga.")
 
-    if not HOST:
-        print("Variable de entorno HOST no está configurada para el ETL.")
-        return
-
-    conn = None
     try:
-        conn = psycopg2.connect(
-            host=HOST,
-            user=USER,
-            password=PASSWORD,
-            dbname=NAME,
-            sslmode=SSLMODE,
-            connect_timeout=10
-        )
         cur = conn.cursor()
         
         conn.autocommit = False 
         
         # Proceso para dim_page
         df['title_normalized'] = df['title_normalized'].astype(str).str.strip()
-        df['language'] = df['language'].astype(str).str.strip() 
+        df['language'] = df['language'].astype(str).str.strip()
+        df['original_title'] = df['original_title'].astype(str).str.strip()
         df['title_normalized'] = df['title_normalized'].str.replace('\x00', '', regex=False).str.strip()
         
-        dim_page_data = df[['title_normalized', 'language', 'category']].drop_duplicates().copy()
+        dim_page_data = df[['title_normalized', 'language', 'category', 'original_title']].drop_duplicates(
+            subset=['title_normalized', 'language'], 
+            keep='first'
+        ).copy()
+        
         dim_page_data = dim_page_data.reset_index(drop=True)
         num_keys = len(dim_page_data)
                 
         insert_dim_page_query = """
-            INSERT INTO dim_page (title_normalized, language, category)
+            INSERT INTO dim_page (title_normalized, language, category, original_title)
             VALUES %s
             ON CONFLICT (title_normalized, language) DO UPDATE
             SET
                 category = EXCLUDED.category,
+                original_title = EXCLUDED.original_title,
                 updated_at = NOW()
             RETURNING page_id, title_normalized AS title_normalized_db, language AS language_db;
         """
@@ -276,7 +408,7 @@ def load_data_to_postgres(df: pd.DataFrame):
             extras.execute_values(
                 cur, 
                 insert_dim_page_query, 
-                chunk[['title_normalized', 'language', 'category']].values, 
+                chunk[['title_normalized', 'language', 'category', 'original_title']].values, 
                 page_size=DIM_BATCH_SIZE
             ) 
             inserted_dim_pages = cur.fetchall()
@@ -311,9 +443,9 @@ def load_data_to_postgres(df: pd.DataFrame):
                 print("\nERROR: Los siguientes datos no pudieron mapear el page_id:")
                 print(unmapped_rows[['title_normalized', 'language']].drop_duplicates().head(5))
             
-            raise Exception("Error al mapear page_id después del UPSERT de dim_page. El problema no fue solucionado.")
+            raise Exception("Error al mapear page_id después del UPSERT de dim_page.")
         
-        df.drop(columns=['title_normalized_db', 'language_db', 'title_normalized', 'category'], inplace=True, errors='ignore')
+        df.drop(columns=['title_normalized_db', 'language_db', 'title_normalized', 'category', 'original_title'], inplace=True, errors='ignore')
 
         # Proceso para fact_pageviews_daily
         fact_columns = [
@@ -354,22 +486,10 @@ def load_data_to_postgres(df: pd.DataFrame):
             conn.close()
 
 def refresh_materialized_views():
-    HOST = os.getenv('DB_HOST')
-    USER = os.getenv('DB_USER')
-    PASSWORD = os.getenv('DB_PASSWORD')
-    NAME = os.getenv('DB_NAME')
-    SSLMODE = os.getenv('DB_SSLMODE', 'require')
-    
-    conn = None
+    conn = get_db_connection()
+    if conn is None:
+        raise Exception("Fallo al conectar a la base de datos para la carga.")
     try:
-        conn = psycopg2.connect(
-            host=HOST,
-            user=USER,
-            password=PASSWORD,
-            dbname=NAME,
-            sslmode=SSLMODE,
-            connect_timeout=10
-        )
         cur = conn.cursor()
 
         cur.execute("REFRESH MATERIALIZED VIEW mv_top_n_daily_by_language;")
@@ -392,10 +512,18 @@ def run_etl():
     languages_to_extract = ["en", "es"]
     exclude_bots = True
     rank_by_views = 5000
+    worker_id = "local-dev-worker"
+    job_id = None
+
+    job_id = register_etl_job_start(start_date_str, end_date_str, languages_to_extract, worker_id)
+    if not job_id:
+        print("Fallo crítico: No se pudo registrar el Job, abortando ETL.")
+        sys.exit(1)
 
     try:
         start_date_dt = datetime.strptime(start_date_str, "%Y-%m-%d")
         end_date_dt = datetime.strptime(end_date_str, "%Y-%m-%d")
+        update_etl_job_status(job_id, 'EXTRAYENDO', 'Conectando a BigQuery y ejecutando consulta de extracción.')
         bq_client = get_bigquery_client()
         extracted_data = extract_pageviews(
             bq_client,
@@ -406,20 +534,50 @@ def run_etl():
             exclude_bots
         )
 
+        rows_processed_count = len(extracted_data)
+        update_etl_job_status(
+            job_id, 
+            'EXTRACCION_COMPLETADA', 
+            f'Extracción completada. Filas extraídas: {rows_processed_count}.'
+        )
+
         if extracted_data.empty:
             print("\nNo se extrajeron datos para los parámetros proporcionados. No hay datos para transformar.")
             return
 
+        update_etl_job_status(job_id, 'TRANSFORMANDO', 'Iniciando cálculos de medias móviles y tendencias (Trend Score).')
         transformed_data = transform_data(extracted_data)
+        update_etl_job_status(
+            job_id, 
+            'TRANSFORMACION_COMPLETADA', 
+            f'Transformación completada. Filas listas para carga: {rows_processed_count}.'
+        )
+        update_etl_job_status(job_id, 'CARGANDO', 'Cargando datos en PostgreSQL (UPSERT de dim_page y fact_pageviews_daily).')
         load_data_to_postgres(transformed_data)
+        update_etl_job_status(job_id, 'CARGA_COMPLETADA', 'Carga de datos finalizada. Iniciando refresco de vistas materializadas.')
+        update_etl_job_status(job_id, 'REFRESCANDO_VISTAS', 'Refrescando vistas para Top-N y Trending.')
         refresh_materialized_views()
-        print(f"El proceso de carga a base de datos se completó con éxito.")
 
     except Exception as e:
         import traceback
         print(f"El proceso falló con una excepción:")
         traceback.print_exc()
+        if job_id:
+            update_etl_job_status(
+                job_id=job_id,
+                status='FALLIDO',
+                message='Proceso terminado con error fatal.',
+                error_message="El proceso falló con una excepción"
+            )
         exit(1)
+    if job_id:
+        update_etl_job_status(
+            job_id=job_id,
+            status='COMPLETADO',
+            message='Job ETL completado exitosamente y vistas materializadas actualizadas.',
+            rows_processed=rows_processed_count
+        )
+        print(f"Proceso ETL completado con éxito. Job ID: {job_id}")
 
 
 if __name__ == "__main__":

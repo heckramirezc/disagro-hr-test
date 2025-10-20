@@ -4,6 +4,7 @@ SELECT
     fpd.day,
     fpd.language,
     dp.title_normalized,
+    dp.original_title,
     fpd.views_total,
     -- Calculo del ranking (día/idioma) agrupado
     RANK() OVER (PARTITION BY fpd.day, fpd.language ORDER BY fpd.views_total DESC) as rank_by_views
@@ -29,6 +30,7 @@ SELECT
     fpd.day,
     fpd.language,
     dp.title_normalized,
+    dp.original_title,
     fpd.views_total,
     fpd.trend_score
 FROM
