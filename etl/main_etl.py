@@ -1,4 +1,6 @@
 import os
+import sys
+import json
 from datetime import datetime
 from google.cloud import bigquery
 import pandas as pd
@@ -8,12 +10,85 @@ from psycopg2 import extras
 from math import ceil
 import re
 import numpy as np
+from typing import Optional, List
 
 BIGQUERY_PROJECT_ID = os.getenv("BIGQUERY_PROJECT_ID", "disagro-hr-test")
 PUBLIC_DATA_ID = "bigquery-public-data"
 BIGQUERY_DATASET = "wikipedia"
 BIGQUERY_TABLE_PREFIX = "pageviews_"
 DIM_BATCH_SIZE = 500
+
+def get_db_connection():
+    HOST = os.getenv('DB_HOST')
+    USER = os.getenv('DB_USER')
+    PASSWORD = os.getenv('DB_PASSWORD')
+    NAME = os.getenv('DB_NAME')
+    SSLMODE = os.getenv('DB_SSLMODE', 'require')
+
+    if not HOST:
+        print("ERROR: Variable de entorno DB_HOST no está configurada.")
+        return None
+
+    try:
+        conn = psycopg2.connect(
+            host=HOST,
+            user=USER,
+            password=PASSWORD,
+            dbname=NAME,
+            sslmode=SSLMODE,
+            connect_timeout=10
+        )
+        return conn
+    except psycopg2.Error as error:
+        print(f"Error al conectar a PostgreSQL: {error}")
+        return None
+
+def register_etl_job_start(start_date: str, end_date: str, languages: List[str], worker_id: str = "worker-python-01") -> Optional[str]:
+    conn = get_db_connection()
+    if conn is None:
+        return None
+
+    try:
+        cur = conn.cursor()
+        
+        job_parameters = {
+            "start_date": start_date,
+            "end_date": end_date,
+            "languages": languages,
+        }
+        job_parameters_json = json.dumps(job_parameters)
+        insert_query = """
+            INSERT INTO etl_jobs (
+                status, job_type, data_date, requested_at, started_at, worker_id, params, message
+            )
+            VALUES (
+                'INICIADO', 
+                'INGESTA_DIARIA', 
+                %s,
+                NOW(), 
+                NOW(), 
+                %s,
+                %s,  -- Ahora inserta la cadena JSON
+                'Job registrado e inicializado.'
+            )
+            RETURNING job_id;
+        """
+        
+        cur.execute(insert_query, (start_date, worker_id, job_parameters_json))        
+        job_id = cur.fetchone()[0]
+        conn.commit()
+        print(f"Job ETL registrado exitosamente con ID: {job_id}")
+        return job_id
+
+    except (Exception, psycopg2.Error) as error:
+        print(f"ERROR: No se pudo registrar el Job ETL en la base de datos: {error}")
+        if conn:
+            conn.rollback()
+        return None
+    finally:
+        if conn:
+            cur.close()
+            conn.close()
 
 def get_bigquery_client():
     try:
@@ -140,7 +215,6 @@ def extract_pageviews(
 
     return df_daily_total
 
-
 def classify_page(title):
     title_lower = str(title).lower()
     
@@ -154,7 +228,6 @@ def classify_page(title):
         return 'Deportes'
     
     return 'General'
-
 
 def transform_data(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
@@ -234,26 +307,11 @@ def load_data_to_postgres(df: pd.DataFrame):
         print("DataFrame vacío, no hay datos para cargar en PostgreSQL.")
         return
 
-    HOST = os.getenv('DB_HOST')
-    USER = os.getenv('DB_USER')
-    PASSWORD = os.getenv('DB_PASSWORD')
-    NAME = os.getenv('DB_NAME')
-    SSLMODE = os.getenv('DB_SSLMODE', 'require')
+    conn = get_db_connection()
+    if conn is None:
+        raise Exception("Fallo al conectar a la base de datos para la carga.")
 
-    if not HOST:
-        print("Variable de entorno HOST no está configurada para el ETL.")
-        return
-
-    conn = None
     try:
-        conn = psycopg2.connect(
-            host=HOST,
-            user=USER,
-            password=PASSWORD,
-            dbname=NAME,
-            sslmode=SSLMODE,
-            connect_timeout=10
-        )
         cur = conn.cursor()
         
         conn.autocommit = False 
@@ -369,22 +427,10 @@ def load_data_to_postgres(df: pd.DataFrame):
             conn.close()
 
 def refresh_materialized_views():
-    HOST = os.getenv('DB_HOST')
-    USER = os.getenv('DB_USER')
-    PASSWORD = os.getenv('DB_PASSWORD')
-    NAME = os.getenv('DB_NAME')
-    SSLMODE = os.getenv('DB_SSLMODE', 'require')
-    
-    conn = None
+    conn = get_db_connection()
+    if conn is None:
+        raise Exception("Fallo al conectar a la base de datos para la carga.")
     try:
-        conn = psycopg2.connect(
-            host=HOST,
-            user=USER,
-            password=PASSWORD,
-            dbname=NAME,
-            sslmode=SSLMODE,
-            connect_timeout=10
-        )
         cur = conn.cursor()
 
         cur.execute("REFRESH MATERIALIZED VIEW mv_top_n_daily_by_language;")
@@ -407,6 +453,13 @@ def run_etl():
     languages_to_extract = ["en", "es"]
     exclude_bots = True
     rank_by_views = 5000
+    worker_id = "local-dev-worker"
+    job_id = None
+
+    job_id = register_etl_job_start(start_date_str, end_date_str, languages_to_extract, worker_id)
+    if not job_id:
+        print("Fallo crítico: No se pudo registrar el Job, abortando ETL.")
+        sys.exit(1)
 
     try:
         start_date_dt = datetime.strptime(start_date_str, "%Y-%m-%d")
