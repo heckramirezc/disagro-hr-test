@@ -68,7 +68,7 @@ def register_etl_job_start(start_date: str, end_date: str, languages: List[str],
                 NOW(), 
                 NOW(), 
                 %s,
-                %s,  -- Ahora inserta la cadena JSON
+                %s,
                 'Job registrado e inicializado.'
             )
             RETURNING job_id;
@@ -85,6 +85,65 @@ def register_etl_job_start(start_date: str, end_date: str, languages: List[str],
         if conn:
             conn.rollback()
         return None
+    finally:
+        if conn:
+            cur.close()
+            conn.close()
+
+def update_etl_job_status(
+    job_id: str, 
+    status: str, 
+    message: Optional[str] = None,
+    rows_processed: Optional[int] = None, 
+    error_message: Optional[str] = None
+) -> bool:
+    conn = get_db_connection()
+    if conn is None:
+        print(f"No se pudo conectar a la BD para actualizar el estado del Job {job_id}.")
+        return False
+
+    try:
+        cur = conn.cursor()
+        
+        update_parts = [
+            "status = %s", 
+            "updated_at = NOW()"
+        ]
+        params = [status]
+        
+        if message is not None:
+            update_parts.append("message = %s")
+            params.append(message)
+
+        if rows_processed is not None:
+            update_parts.append("rows_processed = %s")
+            params.append(rows_processed)
+            
+        if error_message is not None:
+            update_parts.append("error_message = %s")
+            params.append(error_message)
+            
+        if status in ['COMPLETADO', 'FALLIDO']:
+            update_parts.append("finished_at = NOW()")
+
+        update_query = f"""
+            UPDATE etl_jobs 
+            SET {', '.join(update_parts)}
+            WHERE job_id = %s;
+        """
+        
+        params.append(job_id)
+
+        cur.execute(update_query, tuple(params))
+        conn.commit()
+        print(f"Job ETL {job_id} actualizado a estado: {status} - {message if message else ''}")
+        return True
+
+    except (Exception, psycopg2.Error) as error:
+        print(f"ERROR: No se pudo actualizar el estado del Job ETL {job_id}: {error}")
+        if conn:
+            conn.rollback()
+        return False
     finally:
         if conn:
             cur.close()
@@ -464,6 +523,7 @@ def run_etl():
     try:
         start_date_dt = datetime.strptime(start_date_str, "%Y-%m-%d")
         end_date_dt = datetime.strptime(end_date_str, "%Y-%m-%d")
+        update_etl_job_status(job_id, 'EXTRAYENDO', 'Conectando a BigQuery y ejecutando consulta de extracción.')
         bq_client = get_bigquery_client()
         extracted_data = extract_pageviews(
             bq_client,
@@ -474,20 +534,50 @@ def run_etl():
             exclude_bots
         )
 
+        rows_processed_count = len(extracted_data)
+        update_etl_job_status(
+            job_id, 
+            'EXTRACCION_COMPLETADA', 
+            f'Extracción completada. Filas extraídas: {rows_processed_count}.'
+        )
+
         if extracted_data.empty:
             print("\nNo se extrajeron datos para los parámetros proporcionados. No hay datos para transformar.")
             return
 
+        update_etl_job_status(job_id, 'TRANSFORMANDO', 'Iniciando cálculos de medias móviles y tendencias (Trend Score).')
         transformed_data = transform_data(extracted_data)
+        update_etl_job_status(
+            job_id, 
+            'TRANSFORMACION_COMPLETADA', 
+            f'Transformación completada. Filas listas para carga: {rows_processed_count}.'
+        )
+        update_etl_job_status(job_id, 'CARGANDO', 'Cargando datos en PostgreSQL (UPSERT de dim_page y fact_pageviews_daily).')
         load_data_to_postgres(transformed_data)
+        update_etl_job_status(job_id, 'CARGA_COMPLETADA', 'Carga de datos finalizada. Iniciando refresco de vistas materializadas.')
+        update_etl_job_status(job_id, 'REFRESCANDO_VISTAS', 'Refrescando vistas para Top-N y Trending.')
         refresh_materialized_views()
-        print(f"El proceso de carga a base de datos se completó con éxito.")
 
     except Exception as e:
         import traceback
         print(f"El proceso falló con una excepción:")
         traceback.print_exc()
+        if job_id:
+            update_etl_job_status(
+                job_id=job_id,
+                status='FALLIDO',
+                message='Proceso terminado con error fatal.',
+                error_message="El proceso falló con una excepción"
+            )
         exit(1)
+    if job_id:
+        update_etl_job_status(
+            job_id=job_id,
+            status='COMPLETADO',
+            message='Job ETL completado exitosamente y vistas materializadas actualizadas.',
+            rows_processed=rows_processed_count
+        )
+        print(f"Proceso ETL completado con éxito. Job ID: {job_id}")
 
 
 if __name__ == "__main__":
