@@ -12,3 +12,5 @@ python-dotenv
 structlog
 # Manejo de tipo de datos
 db-dtypes
+# Manejo de condiciones avanzadas
+numpy

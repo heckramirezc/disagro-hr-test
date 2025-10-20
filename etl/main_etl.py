@@ -7,6 +7,7 @@ import psycopg2
 from psycopg2 import extras
 from math import ceil
 import re
+import numpy as np
 
 BIGQUERY_PROJECT_ID = os.getenv("BIGQUERY_PROJECT_ID", "disagro-hr-test")
 PUBLIC_DATA_ID = "bigquery-public-data"
@@ -169,6 +170,7 @@ def transform_data(df: pd.DataFrame) -> pd.DataFrame:
     df = df.sort_values(by=['language', 'title', 'day'])
 
     df['category'] = df['title'].apply(classify_page)
+    df['original_title'] = df['title'].copy() 
 
     # Normalización del título para la dimensión dim_page
     df['title_normalized'] = df['title'].apply(normalize_string)    
@@ -182,7 +184,8 @@ def transform_data(df: pd.DataFrame) -> pd.DataFrame:
     
     df_final_agg = df.groupby(['day', 'language', 'title_normalized']).agg(
         views_total=('views_total', 'sum'),
-        category=('category', 'first')
+        category=('category', 'first'),
+        original_title=('original_title', 'first') 
     ).reset_index()
     
     df = df_final_agg.copy()
@@ -211,10 +214,16 @@ def transform_data(df: pd.DataFrame) -> pd.DataFrame:
     )
     
     # Z-score = (valor_actual - media_rolling) / desviacion_estandar_rolling
-    df['trend_score'] = (df['views_total'] - df['avg_views_28d']) / df['rolling_std_28d']
-
+    std_col = df['rolling_std_28d']
+    diff_col = df['views_total'] - df['avg_views_28d']
+    
     # Manejo casos donde la desviación estándar es cero
-    df['trend_score'] = df['trend_score'].replace([float('inf'), float('-inf')], 0)
+    df['trend_score'] = np.where(
+        std_col == 0,
+        0, 
+        diff_col / std_col
+    )
+    
     df['trend_score'] = df['trend_score'].fillna(0)
 
     df = df.drop(columns=['rolling_std_28d'])    
@@ -251,19 +260,25 @@ def load_data_to_postgres(df: pd.DataFrame):
         
         # Proceso para dim_page
         df['title_normalized'] = df['title_normalized'].astype(str).str.strip()
-        df['language'] = df['language'].astype(str).str.strip() 
+        df['language'] = df['language'].astype(str).str.strip()
+        df['original_title'] = df['original_title'].astype(str).str.strip()
         df['title_normalized'] = df['title_normalized'].str.replace('\x00', '', regex=False).str.strip()
         
-        dim_page_data = df[['title_normalized', 'language', 'category']].drop_duplicates().copy()
+        dim_page_data = df[['title_normalized', 'language', 'category', 'original_title']].drop_duplicates(
+            subset=['title_normalized', 'language'], 
+            keep='first'
+        ).copy()
+        
         dim_page_data = dim_page_data.reset_index(drop=True)
         num_keys = len(dim_page_data)
                 
         insert_dim_page_query = """
-            INSERT INTO dim_page (title_normalized, language, category)
+            INSERT INTO dim_page (title_normalized, language, category, original_title)
             VALUES %s
             ON CONFLICT (title_normalized, language) DO UPDATE
             SET
                 category = EXCLUDED.category,
+                original_title = EXCLUDED.original_title,
                 updated_at = NOW()
             RETURNING page_id, title_normalized AS title_normalized_db, language AS language_db;
         """
@@ -276,7 +291,7 @@ def load_data_to_postgres(df: pd.DataFrame):
             extras.execute_values(
                 cur, 
                 insert_dim_page_query, 
-                chunk[['title_normalized', 'language', 'category']].values, 
+                chunk[['title_normalized', 'language', 'category', 'original_title']].values, 
                 page_size=DIM_BATCH_SIZE
             ) 
             inserted_dim_pages = cur.fetchall()
@@ -311,9 +326,9 @@ def load_data_to_postgres(df: pd.DataFrame):
                 print("\nERROR: Los siguientes datos no pudieron mapear el page_id:")
                 print(unmapped_rows[['title_normalized', 'language']].drop_duplicates().head(5))
             
-            raise Exception("Error al mapear page_id después del UPSERT de dim_page. El problema no fue solucionado.")
+            raise Exception("Error al mapear page_id después del UPSERT de dim_page.")
         
-        df.drop(columns=['title_normalized_db', 'language_db', 'title_normalized', 'category'], inplace=True, errors='ignore')
+        df.drop(columns=['title_normalized_db', 'language_db', 'title_normalized', 'category', 'original_title'], inplace=True, errors='ignore')
 
         # Proceso para fact_pageviews_daily
         fact_columns = [
