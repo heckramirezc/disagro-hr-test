@@ -242,6 +242,6 @@ Estas son **Pruebas Unitarias** centradas en la lógica de transformación (`T`)
 *   **Hector Ramírez**
 *   heckramirezc@aol.com
 *   https://www.linkedin.com/in/heckramirez/
-*   http://github.com/heckramirezc/gummybears
+*   http://github.com/heckramirezc
 
 ---
