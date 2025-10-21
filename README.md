@@ -55,6 +55,33 @@ La elección de las tecnologías ha sido cuidadosamente considerada para cumplir
 
 ---
 
+## ✅ Ejecución de Pruebas Automatizadas
+
+El proyecto incluye dos conjuntos de pruebas fundamentales:
+
+### 1. Pruebas del API (NestJS / TypeScript)
+
+Estas pruebas incluyen tanto **Pruebas Unitarias** (para la lógica de negocio en los Servicios) como **Pruebas de Integración** (para la capa HTTP de los Controladores, verificando rutas, DTOs y validación).
+
+
+
+| **Comando**                                                 | **Descripción**                                              |
+| ----------------------------------------------------------- | ------------------------------------------------------------ |
+| `docker exec -it disagro_hr_api npm run test`               | Ejecuta todas las pruebas unitarias y de integración del API. |
+| `docker exec -it disagro_hr_api npm run test -- --verbose`  | **Muestra el detalle completo** de la ejecución, incluyendo cada prueba individual que pasa o falla. |
+| `docker exec -it disagro_hr_api npm run test -- --coverage` | Genera un informe detallado de la **cobertura** del código por pruebas. |
+
+### 2. Pruebas del ETL (Python / Pytest)
+
+Estas son **Pruebas Unitarias** centradas en la lógica de transformación (`T`) del ETL, asegurando que las funciones de manipulación de datos (`pandas`) y cálculo de métricas (como el `trend_score`) sean correctas.
+
+| **Comando**                                                  | **Descripción**                                              |
+| ------------------------------------------------------------ | ------------------------------------------------------------ |
+| `docker compose run --rm -v "$(pwd)/tests:/app/tests" etl pytest tests/etl/` | Ejecuta todas las pruebas del módulo ETL de Python.          |
+| `docker compose run --rm -v "$(pwd)/tests:/app/tests" etl pytest -v tests/etl/` | **Muestra el detalle completo** (`-v` de verbose) de la ejecución de Pytest, listando el nombre de cada prueba. |
+
+---
+
 ## 🧑‍💻 Autor
 
 *   **Hector Ramírez**

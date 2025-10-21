@@ -27,7 +27,7 @@ const mockDataSource = {
   query: jest.fn(),
 };
 
-describe('Servicio de Páginas (Wikipedia)', () => {
+describe('Pruebas unitarias - Servicio de Páginas (Wikipedia)', () => {
   let service: PageService;
   let dataSource: DataSource;
 
