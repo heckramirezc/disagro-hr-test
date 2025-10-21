@@ -116,8 +116,9 @@ export class PageService {
     request: GetPageSeriesDto,
   ): Promise<PaginatedResponse<any>> {
     
-    if (new Date(request.date_from).toString() === 'Invalid Date' || new Date(request.date_to).toString() === 'Invalid Date') {
-        throw new BadRequestException('Las fechas de inicio y fin deben ser válidas (YYYY-MM-DD).');
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(request.date_from) || !dateRegex.test(request.date_to)) {
+      throw new BadRequestException('Las fechas de inicio y fin deben ser válidas (YYYY-MM-DD).');
     }
 
     const _params = { 
